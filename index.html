@@ -6,24 +6,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flappy Treasure Flight</title>
   <style>
-    /* Basic Reset and Styling */
+    /* Basic Reset */
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
     body {
-      background: linear-gradient(to bottom, #87ceeb, #ffffff);
+      /* Diagonal gradient background for a modern look */
+      background: linear-gradient(135deg, #87ceeb, #ffffff);
       overflow: hidden;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       position: relative;
     }
+    /* Canvas styling */
     #gameCanvas {
       display: block;
       margin: 20px auto;
       background: #87ceeb;
       border: 3px solid #333;
       border-radius: 8px;
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
     }
     /* Score Display */
     #scoreBoard {
@@ -31,48 +34,55 @@
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 24px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 26px;
       color: #fff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
       z-index: 10;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
     }
-    /* Overlays (Start and Game Over) */
+    /* Game Over Overlay */
     .overlay {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 28px;
-      color: #fff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-      display: none;
-      z-index: 20;
+      /* Lightened the background from 0.8 to 0.5 so the game remains more visible */
+      background: rgba(0, 0, 0, 0.5);
+      padding: 30px 50px;
+      border-radius: 12px;
       text-align: center;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 20px 40px;
-      border-radius: 10px;
+      z-index: 20;
+      display: none;
+      animation: fadeIn 0.5s forwards;
     }
     .overlay button {
-      padding: 10px 20px;
-      font-size: 24px;
-      background: gold;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
       margin-top: 20px;
+      padding: 12px 25px;
+      font-size: 24px;
+      background: linear-gradient(45deg, #ffca28, #ffc107);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .overlay button:hover {
+      transform: scale(1.05);
+      background: linear-gradient(45deg, #ffc107, #ffb300);
     }
     .overlay p {
       font-size: 20px;
       margin: 10px 0;
     }
-    /* Make start screen visible on load */
-    #startScreen {
-      display: block;
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <!-- Score and Overlays -->
+  <!-- Score and Game Over Overlay -->
   <div id="scoreBoard">Score: 0</div>
   <div id="gameOverScreen" class="overlay">
     <div id="gameOverText">Game Over</div>
@@ -80,13 +90,7 @@
     <div id="highScoreDisplay"></div>
     <button id="restartButton">Restart</button>
   </div>
-  <div id="startScreen" class="overlay">
-    <div>Welcome to Flappy Treasure Flight!</div>
-    <p>Tap/Click or press Space to flap.</p>
-    <p>Collect gold coins and diamonds for points.</p>
-    <p>Avoid the pipes!</p>
-    <button id="startButton">Start Game</button>
-  </div>
+  
   <!-- Game Canvas -->
   <canvas id="gameCanvas" width="480" height="640"></canvas>
   
@@ -104,7 +108,7 @@
       osc.start();
       osc.stop(audioCtx.currentTime + duration);
     }
-    // Extended looping background melody.
+    // Extended background melody
     function playMelody() {
       const melody = [
         { freq: 262, duration: 0.5 },
@@ -148,8 +152,6 @@
     const finalScoreDisplay = document.getElementById('finalScore');
     const highScoreDisplay = document.getElementById('highScoreDisplay');
     const restartButton = document.getElementById('restartButton');
-    const startScreen = document.getElementById('startScreen');
-    const startButton = document.getElementById('startButton');
     
     // Game constants
     const GRAVITY = 0.3;
@@ -167,9 +169,8 @@
     let lastPipeTime = 0;
     let gameOver = false;
     let lastTime = 0;
-    let gameStarted = false;
     
-    // Bird object.
+    // Bird object
     let bird = {
       x: 50,
       y: canvas.height / 2,
@@ -179,32 +180,32 @@
     };
     
     /***** DYNAMIC BIRD DRAWING *****/
-    // Draws a refined blue bird with a dynamic flapping wing, a beak pointing right, and an eye.
+    // The bird has a larger, brighter wing closer to the center for a more noticeable flap.
     function drawBird(x, y, width, height, time) {
       ctx.save();
       ctx.translate(x + width/2, y + height/2);
       
-      // Body: sky blue oval.
+      // Body: sky blue oval
       ctx.fillStyle = "skyblue";
       ctx.beginPath();
-      ctx.ellipse(0, 0, width/2, height/2, 0, 0, 2 * Math.PI);
+      ctx.ellipse(0, 0, width/2, height/2, 0, 0, 2*Math.PI);
       ctx.fill();
       ctx.strokeStyle = "darkblue";
       ctx.lineWidth = 2;
       ctx.stroke();
       
-      // Dynamic left wing.
-      let wingAngle = 0.3 * Math.sin(time / 150);
+      // Dynamic wing
+      let wingAngle = 0.4 * Math.sin(time / 150);
       ctx.save();
-      ctx.translate(-width/4, 0);
+      ctx.translate(-width/8, 0);
       ctx.rotate(wingAngle);
-      ctx.fillStyle = "lightblue";
+      ctx.fillStyle = "lightcyan";
       ctx.beginPath();
-      ctx.ellipse(-width/4, 0, width/4, height/4, 0, 0, 2*Math.PI);
+      ctx.ellipse(-width/4, 0, width/3, height/3, 0, 0, 2*Math.PI);
       ctx.fill();
       ctx.restore();
       
-      // Beak: triangle pointing right.
+      // Beak: triangle pointing right
       ctx.beginPath();
       ctx.moveTo(width/2, -5);
       ctx.lineTo(width/2 + 12, 0);
@@ -215,7 +216,7 @@
       ctx.strokeStyle = "darkorange";
       ctx.stroke();
       
-      // Eye.
+      // Eye: white circle with black pupil
       ctx.beginPath();
       ctx.arc(width/8, -height/4, 4, 0, 2*Math.PI);
       ctx.fillStyle = "white";
@@ -229,7 +230,7 @@
     }
     
     /***** COIN LOGIC *****/
-    // Draws a coin. Gold coins use a radial gradient; diamonds are drawn as a faceted diamond.
+    // Gold coins use a radial gradient; diamonds are drawn as faceted shapes.
     function drawCoin(coin) {
       ctx.save();
       const centerX = coin.x + COIN_SIZE/2;
@@ -247,7 +248,7 @@
         ctx.lineWidth = 2;
         ctx.stroke();
       } else {
-        // Diamond: draw a faceted diamond shape.
+        // Diamond
         ctx.beginPath();
         ctx.moveTo(centerX, centerY - COIN_SIZE/2);
         ctx.lineTo(centerX + COIN_SIZE/3, centerY - COIN_SIZE/6);
@@ -286,9 +287,9 @@
       ctx.scale(cloud.scale, cloud.scale);
       ctx.fillStyle = "rgba(255,255,255,0.8)";
       ctx.beginPath();
-      ctx.arc(0, 0, 20, Math.PI * 0.5, Math.PI * 1.5);
-      ctx.arc(25, -10, 20, Math.PI, Math.PI * 2);
-      ctx.arc(50, 0, 20, Math.PI * 1.5, Math.PI * 0.5);
+      ctx.arc(0, 0, 20, Math.PI*0.5, Math.PI*1.5);
+      ctx.arc(25, -10, 20, Math.PI, Math.PI*2);
+      ctx.arc(50, 0, 20, Math.PI*1.5, Math.PI*0.5);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -311,7 +312,7 @@
       ctx.fill();
       ctx.stroke();
     }
-    // Spawns pipes and a coin in the gap.
+    // Spawns two pipes (top and bottom) with a gap that starts wide and narrows as score increases.
     function spawnPipe() {
       let currentGap = Math.max(BASE_PIPE_GAP - score, MIN_PIPE_GAP);
       let gapCenter = Math.random() * (canvas.height - currentGap) + currentGap/2;
@@ -361,7 +362,7 @@
       }
     }
     document.addEventListener("keydown", (e) => {
-      if(e.code === "Space") flap();
+      if (e.code === "Space") flap();
     });
     canvas.addEventListener("click", flap);
     canvas.addEventListener("touchstart", (e) => {
@@ -373,7 +374,6 @@
     restartButton.addEventListener("click", restartGame);
     function endGame() {
       gameOver = true;
-      // Update high score.
       let highScore = localStorage.getItem("highScore") || 0;
       if (score > highScore) {
         highScore = score;
@@ -398,15 +398,6 @@
       requestAnimationFrame(loop);
     }
     
-    /***** START SCREEN *****/
-    let gameStarted = false;
-    startButton.addEventListener("click", function() {
-      startScreen.style.display = "none";
-      gameStarted = true;
-      lastTime = performance.now();
-      requestAnimationFrame(loop);
-    });
-    
     /***** DRAWING FUNCTIONS *****/
     function drawBackground() {
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -419,22 +410,19 @@
     
     /***** GAME LOOP *****/
     function loop(timestamp) {
-      // Always schedule the next frame.
-      requestAnimationFrame(loop);
-      if (!gameStarted || gameOver) return;
-      
+      if (gameOver) return;
       lastTime = lastTime || timestamp;
       const deltaTime = timestamp - lastTime;
       lastTime = timestamp;
       
       drawBackground();
       
-      // Update bird.
+      // Update bird physics and draw the bird.
       bird.velocity += GRAVITY;
       bird.y += bird.velocity;
       drawBird(bird.x, bird.y, bird.width, bird.height, timestamp);
       
-      // Spawn pipes.
+      // Spawn pipes at intervals.
       if (timestamp - lastPipeTime > PIPE_INTERVAL) {
         spawnPipe();
         lastPipeTime = timestamp;
@@ -475,8 +463,10 @@
       if (bird.y + bird.height > canvas.height || bird.y < 0) {
         endGame();
       }
+      
+      requestAnimationFrame(loop);
     }
-    // Start the loop (it will do nothing until gameStarted is true).
+    // Start game loop immediately.
     requestAnimationFrame(loop);
   </script>
 </body>
