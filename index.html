@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- Mobile-friendly viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flappy Treasure Flight</title>
   <style>
-    /* 
-      You can split this CSS into CodePen's CSS panel for better organization.
-      This styling centers the canvas, styles the score and game-over overlay,
-      and creates a pleasant sky-blue to white gradient background.
-    */
+    /* Basic Reset and Styling */
     * {
       margin: 0;
       padding: 0;
@@ -26,6 +24,7 @@
       border: 3px solid #333;
       border-radius: 8px;
     }
+    /* Score Display */
     #scoreBoard {
       position: absolute;
       top: 20px;
@@ -36,12 +35,13 @@
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
       z-index: 10;
     }
+    /* Game Over Overlay */
     #gameOverScreen {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 36px;
+      font-size: 28px;
       color: #fff;
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
       display: none;
@@ -51,7 +51,7 @@
       padding: 20px 40px;
       border-radius: 10px;
     }
-    #restartButton {
+    #gameOverScreen button {
       padding: 10px 20px;
       font-size: 24px;
       background: gold;
@@ -63,10 +63,11 @@
   </style>
 </head>
 <body>
-  <!-- UI Elements -->
+  <!-- Score and Game Over UI -->
   <div id="scoreBoard">Score: 0</div>
   <div id="gameOverScreen">
     <div id="gameOverText">Game Over</div>
+    <div id="finalScore"></div>
     <button id="restartButton">Restart</button>
   </div>
 
@@ -75,10 +76,8 @@
 
   <script>
     /***** AUDIO SETUP *****/
-    // Create an AudioContext for playing sound effects and background music.
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // A simple function to play a short beep (used for the bird flap and coin pickup).
     function playBeep(frequency, duration, volume = 0.1) {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -91,17 +90,20 @@
       osc.stop(audioCtx.currentTime + duration);
     }
 
-    // A fun, catchy melody that loops in the background.
     function playMelody() {
       const melody = [
-        { freq: 262, duration: 0.3 },
-        { freq: 294, duration: 0.3 },
-        { freq: 330, duration: 0.3 },
-        { freq: 349, duration: 0.3 },
-        { freq: 392, duration: 0.3 },
-        { freq: 440, duration: 0.3 },
-        { freq: 494, duration: 0.3 },
-        { freq: 523, duration: 0.3 }
+        { freq: 262, duration: 0.25 },
+        { freq: 294, duration: 0.25 },
+        { freq: 330, duration: 0.25 },
+        { freq: 349, duration: 0.25 },
+        { freq: 392, duration: 0.25 },
+        { freq: 370, duration: 0.25 },
+        { freq: 330, duration: 0.25 },
+        { freq: 294, duration: 0.25 },
+        { freq: 262, duration: 0.25 },
+        { freq: 294, duration: 0.25 },
+        { freq: 330, duration: 0.25 },
+        { freq: 349, duration: 0.25 }
       ];
       let startTime = audioCtx.currentTime;
       melody.forEach(note => {
@@ -119,7 +121,6 @@
       const totalTime = melody.reduce((sum, note) => sum + note.duration, 0) + melody.length * 0.1;
       setTimeout(playMelody, totalTime * 1000);
     }
-    // Start the background melody on first user interaction to bypass autoplay restrictions.
     document.body.addEventListener('click', function initAudio() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       playMelody();
@@ -131,14 +132,15 @@
     const ctx = canvas.getContext('2d');
     const scoreBoard = document.getElementById('scoreBoard');
     const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreDisplay = document.getElementById('finalScore');
     const restartButton = document.getElementById('restartButton');
 
-    // Game constants (with adjusted gravity and jump)
-    const GRAVITY = 0.35;
-    const JUMP_STRENGTH = -7;
-    const PIPE_GAP = 150;
+    // Game constants: slightly lower gravity and a moderately stronger jump boost.
+    const GRAVITY = 0.3;
+    const JUMP_STRENGTH = -5;
+    const BASE_PIPE_GAP = 150;
     const PIPE_WIDTH = 60;
-    const PIPE_INTERVAL = 1800; // milliseconds
+    const PIPE_INTERVAL = 1800; // ms
     const COIN_SIZE = 30;
 
     let clouds = [];
@@ -149,33 +151,83 @@
     let gameOver = false;
     let lastTime = 0;
 
-    // A new bird image using an inline SVG that looks more like a real bird.
-    const birdImg = new Image();
-    birdImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cellipse%20cx='32'%20cy='32'%20rx='20'%20ry='12'%20fill='%23FFD700'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Cpath%20d='M32%2032%20Q22%2020,%2032%2024'%20fill='%23FFC107'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Cpolygon%20points='52,30%2060,28%2052,26'%20fill='orange'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Ccircle%20cx='42'%20cy='28'%20r='2'%20fill='black'/%3E%3C/svg%3E";
+    /***** DYNAMIC BIRD DRAWING *****/
+    // Instead of a static image, we draw a dynamic bird with a flapping wing.
+    function drawBird(x, y, width, height, time) {
+      ctx.save();
+      // Translate so that (x,y) is the top-left corner of the bird's bounding box.
+      ctx.translate(x + width/2, y + height/2);
 
-    // Improved pipe images (SVG with rounded corners).
-    const pipeNorthImg = new Image();
-    pipeNorthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20x='0'%20y='0'%20width='60'%20height='300'%20rx='10'%20fill='%234CAF50'%20stroke='%232E7D32'%20stroke-width='4'/%3E%3C/svg%3E";
-    const pipeSouthImg = new Image();
-    pipeSouthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20x='0'%20y='0'%20width='60'%20height='300'%20rx='10'%20fill='%2366BB6A'%20stroke='%23388E3C'%20stroke-width='4'/%3E%3C/svg%3E";
+      // Create a vertical gradient for the body.
+      const grad = ctx.createLinearGradient(0, -height/2, 0, height/2);
+      grad.addColorStop(0, "#FFD700");
+      grad.addColorStop(1, "#FFA500");
 
-    // Coin images (gold coin and diamond).
-    const goldCoinImg = new Image();
-    goldCoinImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Ccircle%20cx='16'%20cy='16'%20r='14'%20fill='gold'%20stroke='%232E7D32'%20stroke-width='2'/%3E%3C/svg%3E";
-    const diamondImg = new Image();
-    diamondImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cpolygon%20points='16,2%2030,16%2016,30%202,16'%20fill='deepskyblue'%20stroke='blue'%20stroke-width='2'/%3E%3C/svg%3E";
+      // Draw the body (ellipse).
+      ctx.beginPath();
+      ctx.ellipse(0, 0, width/2, height/2, 0, 0, 2 * Math.PI);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = "#D2691E";
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
-    // Bird object (position, dimensions, and velocity).
-    let bird = {
-      x: 50,
-      y: canvas.height / 2,
-      width: 40,
-      height: 32,
-      velocity: 0
-    };
+      // Compute a wing angle that oscillates over time.
+      const wingAngle = 0.3 * Math.sin(time / 150);
 
-    /***** CLOUDS *****/
-    // Clouds add depth to the background.
+      // Draw the left wing (flapping).
+      ctx.save();
+      ctx.translate(-width/4, 0);
+      ctx.rotate(wingAngle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(-width/2, -height/2, 0, -height/4);
+      ctx.fillStyle = "#FFB347";
+      ctx.fill();
+      ctx.restore();
+
+      // Draw the right wing (static, for contrast).
+      ctx.save();
+      ctx.translate(width/4, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(width/2, -height/3, 0, -height/6);
+      ctx.fillStyle = "#FFB347";
+      ctx.fill();
+      ctx.restore();
+
+      // Draw the beak.
+      ctx.beginPath();
+      ctx.moveTo(width/2, 0);
+      ctx.lineTo(width/2 + 10, -5);
+      ctx.lineTo(width/2 + 10, 5);
+      ctx.closePath();
+      ctx.fillStyle = "#FF4500";
+      ctx.fill();
+
+      // Draw the eye.
+      ctx.beginPath();
+      ctx.arc(width/8, -height/8, 3, 0, 2 * Math.PI);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(width/8, -height/8, 1.5, 0, 2 * Math.PI);
+      ctx.fillStyle = "black";
+      ctx.fill();
+
+      // Draw a small tail.
+      ctx.beginPath();
+      ctx.moveTo(-width/2, 0);
+      ctx.lineTo(-width/2 - 10, -5);
+      ctx.lineTo(-width/2 - 10, 5);
+      ctx.closePath();
+      ctx.fillStyle = "#FFB347";
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    /***** CLOUDS (Background) *****/
     function spawnCloud() {
       clouds.push({
         x: canvas.width,
@@ -200,7 +252,6 @@
     }
 
     /***** INPUT HANDLING *****/
-    // The bird flaps (jumps) when the user taps, clicks, or presses space.
     function flap() {
       if (!gameOver) {
         bird.velocity = JUMP_STRENGTH;
@@ -219,24 +270,21 @@
     /***** GAME LOGIC *****/
     restartButton.addEventListener('click', restartGame);
 
-    // Spawn pipes with a clearly defined gap using a gap center.
     function spawnPipe() {
-      const gapCenter = Math.random() * (canvas.height - PIPE_GAP - 100) + (PIPE_GAP / 2 + 50);
-      const topPipeBottom = gapCenter - PIPE_GAP / 2;
-      const bottomPipeTop = gapCenter + PIPE_GAP / 2;
-      // Top pipe (positioned so its bottom aligns with the gap).
+      let currentGap = Math.max(BASE_PIPE_GAP - score * 0.5, 100);
+      const gapCenter = Math.random() * (canvas.height - currentGap - 100) + (currentGap / 2 + 50);
+      const topPipeBottom = gapCenter - currentGap / 2;
+      const bottomPipeTop = gapCenter + currentGap / 2;
       pipes.push({
         x: canvas.width,
         y: topPipeBottom - pipeNorthImg.height,
         isTop: true
       });
-      // Bottom pipe (positioned so its top aligns with the gap).
       pipes.push({
         x: canvas.width,
         y: bottomPipeTop,
         isTop: false
       });
-      // With 80% probability, spawn a coin or diamond in the gap.
       if (Math.random() < 0.8) {
         const type = Math.random() < 0.6 ? "gold" : "diamond";
         coins.push({
@@ -248,7 +296,6 @@
       }
     }
 
-    // Standard rectangle collision detection.
     function detectCollision(r1, r2) {
       return (
         r1.x < r2.x + r2.width &&
@@ -260,6 +307,7 @@
 
     function endGame() {
       gameOver = true;
+      finalScoreDisplay.textContent = "Final Score: " + score;
       gameOverScreen.style.display = 'block';
     }
 
@@ -293,10 +341,10 @@
     /***** GAME LOOP *****/
     function loop(timestamp) {
       if (gameOver) return;
+      lastTime = lastTime || timestamp;
       const deltaTime = timestamp - lastTime;
       lastTime = timestamp;
 
-      // Update cloud positions.
       clouds.forEach((cloud, i) => {
         cloud.x -= cloud.speed;
         if (cloud.x + 60 * cloud.scale < 0) {
@@ -306,20 +354,19 @@
 
       drawBackground();
 
-      // Update bird physics.
+      // Update bird physics and draw the dynamic bird.
       bird.velocity += GRAVITY;
       bird.y += bird.velocity;
-      ctx.drawImage(birdImg, bird.x, bird.y, bird.width, bird.height);
+      drawBird(bird.x, bird.y, bird.width, bird.height, timestamp);
 
-      // Increase pipe speed gradually based on score.
-      const pipeSpeed = 2 + score * 0.02;
+      const basePipeSpeed = 2;
+      const pipeSpeed = basePipeSpeed + score * 0.03;
 
-      // Spawn pipes at set intervals.
       if (timestamp - lastPipeTime > PIPE_INTERVAL) {
         spawnPipe();
         lastPipeTime = timestamp;
       }
-      // Update and draw pipes.
+
       for (let i = pipes.length - 1; i >= 0; i--) {
         const pipe = pipes[i];
         pipe.x -= pipeSpeed;
@@ -339,7 +386,6 @@
         }
       }
 
-      // Update and draw coins/diamonds.
       for (let i = coins.length - 1; i >= 0; i--) {
         const coin = coins[i];
         coin.x -= pipeSpeed;
@@ -356,14 +402,13 @@
         }
       }
 
-      // End game if the bird hits the ground or flies off the top.
       if (bird.y + bird.height > canvas.height || bird.y < 0) {
         endGame();
       }
+
       requestAnimationFrame(loop);
     }
 
-    // Start the game loop.
     requestAnimationFrame(loop);
   </script>
 </body>
