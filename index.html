@@ -76,7 +76,6 @@
 
   <script>
     /***** AUDIO SETUP *****/
-    // Simple beep for flap sound
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep(frequency, duration, volume = 0.1) {
       const osc = audioCtx.createOscillator();
@@ -89,17 +88,19 @@
       osc.start();
       osc.stop(audioCtx.currentTime + duration);
     }
-    // (Optional) Melody – you can comment this out if needed.
+    // Extended background melody
     function playMelody() {
       const melody = [
-        { freq: 262, duration: 0.25 },
-        { freq: 294, duration: 0.25 },
-        { freq: 330, duration: 0.25 },
-        { freq: 349, duration: 0.25 },
-        { freq: 392, duration: 0.25 },
-        { freq: 370, duration: 0.25 },
-        { freq: 330, duration: 0.25 },
-        { freq: 294, duration: 0.25 }
+        { freq: 262, duration: 0.5 },
+        { freq: 294, duration: 0.5 },
+        { freq: 330, duration: 0.5 },
+        { freq: 349, duration: 0.5 },
+        { freq: 392, duration: 0.5 },
+        { freq: 370, duration: 0.5 },
+        { freq: 330, duration: 0.5 },
+        { freq: 294, duration: 0.5 },
+        { freq: 262, duration: 0.5 },
+        { freq: 196, duration: 0.5 }
       ];
       let startTime = audioCtx.currentTime;
       melody.forEach(note => {
@@ -131,21 +132,24 @@
     const finalScoreDisplay = document.getElementById('finalScore');
     const restartButton = document.getElementById('restartButton');
 
-    // Game constants: simpler numbers
+    // Game constants
     const GRAVITY = 0.3;
     const JUMP_STRENGTH = -5;
-    const BASE_PIPE_GAP = 150;
+    const BASE_PIPE_GAP = 200;  // Start easier.
+    const MIN_PIPE_GAP = 120;
     const PIPE_WIDTH = 60;
-    const PIPE_INTERVAL = 1800; // in ms
+    const PIPE_INTERVAL = 1800; // ms
+    const COIN_SIZE = 30;
 
     let clouds = [];
     let pipes = [];
+    let coins = [];
     let score = 0;
     let lastPipeTime = 0;
     let gameOver = false;
     let lastTime = 0;
 
-    // Simplified bird object
+    // Bird object.
     let bird = {
       x: 50,
       y: canvas.height / 2,
@@ -155,39 +159,101 @@
     };
 
     /***** DYNAMIC BIRD DRAWING *****/
-    // A simplified bird drawn as an ellipse with one flapping wing.
+    // Draws a blue bird with a dynamic flapping wing, a beak pointing right, and an eye.
     function drawBird(x, y, width, height, time) {
       ctx.save();
-      ctx.translate(x + width / 2, y + height / 2);
-      ctx.fillStyle = "#FFD700";
+      ctx.translate(x + width/2, y + height/2);
+      
+      // Draw body: sky blue oval.
+      ctx.fillStyle = "skyblue";
       ctx.beginPath();
-      ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, 2 * Math.PI);
+      ctx.ellipse(0, 0, width/2, height/2, 0, 0, 2*Math.PI);
       ctx.fill();
-      ctx.strokeStyle = "#D2691E";
+      ctx.strokeStyle = "darkblue";
       ctx.lineWidth = 2;
       ctx.stroke();
-      // Flapping wing: oscillates based on time
+      
+      // Dynamic left wing: light blue oval that flaps.
       let wingAngle = 0.3 * Math.sin(time / 150);
       ctx.save();
-      ctx.translate(-width / 4, 0);
+      ctx.translate(-width/4, 0);
       ctx.rotate(wingAngle);
-      ctx.strokeStyle = "#FFB347";
-      ctx.lineWidth = 4;
+      ctx.fillStyle = "lightblue";
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-width / 2, -height / 2);
-      ctx.stroke();
+      ctx.ellipse(-width/4, 0, width/4, height/4, 0, 0, 2*Math.PI);
+      ctx.fill();
       ctx.restore();
+      
+      // Draw beak: triangle pointing right.
+      ctx.beginPath();
+      ctx.moveTo(width/2, -5);
+      ctx.lineTo(width/2 + 12, 0);
+      ctx.lineTo(width/2, 5);
+      ctx.closePath();
+      ctx.fillStyle = "orange";
+      ctx.fill();
+      ctx.strokeStyle = "darkorange";
+      ctx.stroke();
+      
+      // Draw eye: white circle with a black pupil.
+      ctx.beginPath();
+      ctx.arc(width/8, -height/4, 4, 0, 2*Math.PI);
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(width/8, -height/4, 2, 0, 2*Math.PI);
+      ctx.fillStyle = "black";
+      ctx.fill();
+      
+      ctx.restore();
+    }
+
+    /***** COIN LOGIC *****/
+    // Draws a coin. Gold coins use a radial gradient; diamonds are drawn as a diamond shape with a linear gradient.
+    function drawCoin(coin) {
+      ctx.save();
+      const centerX = coin.x + COIN_SIZE/2;
+      const centerY = coin.y + COIN_SIZE/2;
+      if(coin.type === "gold"){
+        let grad = ctx.createRadialGradient(centerX, centerY, COIN_SIZE/4, centerX, centerY, COIN_SIZE/2);
+        grad.addColorStop(0, "#FFFACD");
+        grad.addColorStop(0.5, "#FFD700");
+        grad.addColorStop(1, "#B8860B");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, COIN_SIZE/2, 0, 2*Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "goldenrod";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        // Diamond: draw a rotated square (diamond shape)
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - COIN_SIZE/2);
+        ctx.lineTo(centerX + COIN_SIZE/2, centerY);
+        ctx.lineTo(centerX, centerY + COIN_SIZE/2);
+        ctx.lineTo(centerX - COIN_SIZE/2, centerY);
+        ctx.closePath();
+        let grad = ctx.createLinearGradient(centerX - COIN_SIZE/2, centerY - COIN_SIZE/2, centerX + COIN_SIZE/2, centerY + COIN_SIZE/2);
+        grad.addColorStop(0, "#E0FFFF");
+        grad.addColorStop(1, "deepskyblue");
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
     /***** CLOUDS (Background) *****/
+    // Clouds now spawn with a random x across the canvas.
     function spawnCloud() {
       clouds.push({
-        x: canvas.width,
-        y: Math.random() * (canvas.height / 2),
+        x: Math.random() * canvas.width,
+        y: Math.random() * (canvas.height/2),
         speed: 0.5 + Math.random(),
-        scale: 0.5 + Math.random() * 0.5
+        scale: 0.5 + Math.random()*0.5
       });
     }
     setInterval(spawnCloud, 3000);
@@ -197,49 +263,70 @@
       ctx.scale(cloud.scale, cloud.scale);
       ctx.fillStyle = "rgba(255,255,255,0.8)";
       ctx.beginPath();
-      ctx.arc(0, 0, 20, Math.PI * 0.5, Math.PI * 1.5);
-      ctx.arc(25, -10, 20, Math.PI, Math.PI * 2);
-      ctx.arc(50, 0, 20, Math.PI * 1.5, Math.PI * 0.5);
+      ctx.arc(0, 0, 20, Math.PI*0.5, Math.PI*1.5);
+      ctx.arc(25, -10, 20, Math.PI, Math.PI*2);
+      ctx.arc(50, 0, 20, Math.PI*1.5, Math.PI*0.5);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     }
 
     /***** PIPE LOGIC *****/
-    // Simplified pipe spawning: draws two rectangles as pipes.
+    // Helper: draws a rounded rectangle.
+    function drawRoundedRect(x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x+radius, y);
+      ctx.lineTo(x+width-radius, y);
+      ctx.quadraticCurveTo(x+width, y, x+width, y+radius);
+      ctx.lineTo(x+width, y+height-radius);
+      ctx.quadraticCurveTo(x+width, y+height, x+width-radius, y+height);
+      ctx.lineTo(x+radius, y+height);
+      ctx.quadraticCurveTo(x, y+height, x, y+height-radius);
+      ctx.lineTo(x, y+radius);
+      ctx.quadraticCurveTo(x, y, x+radius, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    // Spawns pipes and a coin in the gap.
     function spawnPipe() {
-      let currentGap = Math.max(BASE_PIPE_GAP - score * 0.5, 100);
-      let gapCenter = Math.random() * (canvas.height - currentGap) + currentGap / 2;
-      let topPipeHeight = gapCenter - currentGap / 2;
-      let bottomPipeY = gapCenter + currentGap / 2;
-      let bottomPipeHeight = canvas.height - bottomPipeY;
-      // Top pipe
+      let currentGap = Math.max(BASE_PIPE_GAP - score, MIN_PIPE_GAP);
+      let gapCenter = Math.random() * (canvas.height - currentGap) + currentGap/2;
+      let topPipeHeight = gapCenter - currentGap/2;
+      let bottomPipeY = gapCenter + currentGap/2;
       pipes.push({
         x: canvas.width,
         y: 0,
         width: PIPE_WIDTH,
         height: topPipeHeight
       });
-      // Bottom pipe
       pipes.push({
         x: canvas.width,
         y: bottomPipeY,
         width: PIPE_WIDTH,
-        height: bottomPipeHeight
+        height: canvas.height - bottomPipeY
       });
+      if(Math.random() < 0.8){
+        const type = (Math.random() < 0.6) ? "gold" : "diamond";
+        coins.push({
+          x: canvas.width + PIPE_WIDTH/2 - COIN_SIZE/2,
+          y: gapCenter - COIN_SIZE/2,
+          type: type,
+          collected: false
+        });
+      }
     }
-    // Draw pipes as simple green rectangles.
     function drawPipe(pipe) {
       ctx.fillStyle = "green";
-      ctx.fillRect(pipe.x, pipe.y, pipe.width, pipe.height);
+      ctx.strokeStyle = "darkgreen";
+      drawRoundedRect(pipe.x, pipe.y, pipe.width, pipe.height, 8);
     }
-    // Basic rectangle collision detection.
-    function detectCollision(b, p) {
+    function detectCollision(r1, r2) {
       return (
-        b.x < p.x + p.width &&
-        b.x + b.width > p.x &&
-        b.y < p.y + p.height &&
-        b.y + b.height > p.y
+        r1.x < r2.x + r2.width &&
+        r1.x + r1.width > r2.x &&
+        r1.y < r2.y + r2.height &&
+        r1.y + r1.height > r2.y
       );
     }
 
@@ -251,7 +338,7 @@
       }
     }
     document.addEventListener("keydown", (e) => {
-      if (e.code === "Space") flap();
+      if(e.code === "Space") flap();
     });
     canvas.addEventListener("click", flap);
     canvas.addEventListener("touchstart", (e) => {
@@ -271,6 +358,7 @@
       bird.y = canvas.height / 2;
       bird.velocity = 0;
       pipes = [];
+      coins = [];
       score = 0;
       lastPipeTime = 0;
       gameOver = false;
@@ -287,7 +375,7 @@
       grad.addColorStop(1, "#ffffff");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      clouds.forEach((cloud) => drawCloud(cloud));
+      clouds.forEach(cloud => drawCloud(cloud));
     }
 
     /***** GAME LOOP *****/
@@ -299,7 +387,7 @@
 
       drawBackground();
 
-      // Update and draw the bird.
+      // Update bird physics and draw the bird.
       bird.velocity += GRAVITY;
       bird.y += bird.velocity;
       drawBird(bird.x, bird.y, bird.width, bird.height, timestamp);
@@ -312,7 +400,7 @@
 
       // Update and draw pipes.
       const basePipeSpeed = 2;
-      const pipeSpeed = basePipeSpeed + score * 0.03;
+      const pipeSpeed = basePipeSpeed;
       for (let i = pipes.length - 1; i >= 0; i--) {
         let pipe = pipes[i];
         pipe.x -= pipeSpeed;
@@ -322,9 +410,22 @@
         }
         if (pipe.x + pipe.width < 0) {
           pipes.splice(i, 1);
-          // Increase score for each pair of pipes passed.
-          score++;
+        }
+      }
+
+      // Update and draw coins.
+      for (let i = coins.length - 1; i >= 0; i--) {
+        let coin = coins[i];
+        coin.x -= pipeSpeed;
+        drawCoin(coin);
+        if (!coin.collected && detectCollision(bird, {x: coin.x, y: coin.y, width: COIN_SIZE, height: COIN_SIZE})) {
+          coin.collected = true;
+          playBeep(600, 0.1);
+          score += (coin.type === "gold") ? 10 : 20;
           scoreBoard.textContent = "Score: " + score;
+        }
+        if (coin.x + COIN_SIZE < 0 || coin.collected) {
+          coins.splice(i, 1);
         }
       }
 
@@ -338,4 +439,4 @@
     requestAnimationFrame(loop);
   </script>
 </body>
-</html>
+</html>  
