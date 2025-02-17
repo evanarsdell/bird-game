@@ -5,16 +5,10 @@
   <title>Flappy Treasure Flight</title>
   <style>
     /* 
-      In CodePen you have the option to split your code into three panels:
-      - HTML: for the structure
-      - CSS: for the styling
-      - JavaScript: for the behavior
-      Splitting can improve readability and organization. However, combining
-      them in a single HTML file (with <style> and <script> tags) is perfectly
-      acceptable for small projects or demos. Use whichever approach suits your workflow.
+      You can split this CSS into CodePen's CSS panel for better organization.
+      This styling centers the canvas, styles the score and game-over overlay,
+      and creates a pleasant sky-blue to white gradient background.
     */
-
-    /* Reset & Base Styling */
     * {
       margin: 0;
       padding: 0;
@@ -25,7 +19,6 @@
       overflow: hidden;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    /* Center the canvas and add a border */
     #gameCanvas {
       display: block;
       margin: 20px auto;
@@ -33,7 +26,6 @@
       border: 3px solid #333;
       border-radius: 8px;
     }
-    /* Score display styling */
     #scoreBoard {
       position: absolute;
       top: 20px;
@@ -41,10 +33,9 @@
       transform: translateX(-50%);
       font-size: 24px;
       color: #fff;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
       z-index: 10;
     }
-    /* Game Over overlay */
     #gameOverScreen {
       position: absolute;
       top: 50%;
@@ -52,7 +43,7 @@
       transform: translate(-50%, -50%);
       font-size: 36px;
       color: #fff;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
       display: none;
       z-index: 10;
       text-align: center;
@@ -72,7 +63,7 @@
   </style>
 </head>
 <body>
-  <!-- Score and Game Over UI -->
+  <!-- UI Elements -->
   <div id="scoreBoard">Score: 0</div>
   <div id="gameOverScreen">
     <div id="gameOverText">Game Over</div>
@@ -84,10 +75,10 @@
 
   <script>
     /***** AUDIO SETUP *****/
-    // Create an AudioContext for our sounds
+    // Create an AudioContext for playing sound effects and background music.
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Play a soft beep (for jump and coin sounds)
+    // A simple function to play a short beep (used for the bird flap and coin pickup).
     function playBeep(frequency, duration, volume = 0.1) {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -100,76 +91,81 @@
       osc.stop(audioCtx.currentTime + duration);
     }
 
-    // Ambient background music: plays a soft chord every few seconds
-    function playAmbientMusic() {
-      const now = audioCtx.currentTime;
-      const chordFrequencies = [261.63, 329.63, 392.00]; // C4, E4, G4
-      const duration = 2; // seconds
-      chordFrequencies.forEach(freq => {
+    // A fun, catchy melody that loops in the background.
+    function playMelody() {
+      const melody = [
+        { freq: 262, duration: 0.3 },
+        { freq: 294, duration: 0.3 },
+        { freq: 330, duration: 0.3 },
+        { freq: 349, duration: 0.3 },
+        { freq: 392, duration: 0.3 },
+        { freq: 440, duration: 0.3 },
+        { freq: 494, duration: 0.3 },
+        { freq: 523, duration: 0.3 }
+      ];
+      let startTime = audioCtx.currentTime;
+      melody.forEach(note => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.frequency.value = freq;
+        osc.frequency.value = note.freq;
         osc.type = 'sine';
-        gain.gain.setValueAtTime(0.03, now);
-        osc.start(now);
-        osc.stop(now + duration);
+        gain.gain.setValueAtTime(0.05, startTime);
+        osc.start(startTime);
+        osc.stop(startTime + note.duration);
+        startTime += note.duration + 0.1;
       });
-      // Loop the ambient chord every 5 seconds
-      setTimeout(playAmbientMusic, 5000);
+      const totalTime = melody.reduce((sum, note) => sum + note.duration, 0) + melody.length * 0.1;
+      setTimeout(playMelody, totalTime * 1000);
     }
-    // Start ambient music on first user interaction to satisfy autoplay policies.
+    // Start the background melody on first user interaction to bypass autoplay restrictions.
     document.body.addEventListener('click', function initAudio() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      playAmbientMusic();
+      playMelody();
       document.body.removeEventListener('click', initAudio);
     });
 
     /***** GAME SETUP *****/
-    // Get DOM elements
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreBoard = document.getElementById('scoreBoard');
     const gameOverScreen = document.getElementById('gameOverScreen');
     const restartButton = document.getElementById('restartButton');
 
-    // Game constants
-    const GRAVITY = 0.5;
-    const JUMP_STRENGTH = -8;
+    // Game constants (with adjusted gravity and jump)
+    const GRAVITY = 0.35;
+    const JUMP_STRENGTH = -7;
     const PIPE_GAP = 150;
     const PIPE_WIDTH = 60;
     const PIPE_INTERVAL = 1800; // milliseconds
     const COIN_SIZE = 30;
-    const COIN_INTERVAL = 2500; // milliseconds
 
-    // Arrays for clouds, pipes, and coins
     let clouds = [];
     let pipes = [];
     let coins = [];
     let score = 0;
     let lastPipeTime = 0;
-    let lastCoinTime = 0;
     let gameOver = false;
     let lastTime = 0;
 
-    // Create a bird object with a nicer, bird-like SVG
+    // A new bird image using an inline SVG that looks more like a real bird.
     const birdImg = new Image();
-    birdImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cpath%20d='M10%2032%20C10%2020,30%2010,50%2020%20C60%2025,60%2035,50%2040%20C30%2050,10%2040,10%2032Z'%20fill='orange'%20stroke='brown'%20stroke-width='2'/%3E%3Ccircle%20cx='20'%20cy='28'%20r='3'%20fill='black'/%3E%3C/svg%3E";
+    birdImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cellipse%20cx='32'%20cy='32'%20rx='20'%20ry='12'%20fill='%23FFD700'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Cpath%20d='M32%2032%20Q22%2020,%2032%2024'%20fill='%23FFC107'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Cpolygon%20points='52,30%2060,28%2052,26'%20fill='orange'%20stroke='%23B8860B'%20stroke-width='2'/%3E%3Ccircle%20cx='42'%20cy='28'%20r='2'%20fill='black'/%3E%3C/svg%3E";
 
-    // Pipe images (improved visuals)
+    // Improved pipe images (SVG with rounded corners).
     const pipeNorthImg = new Image();
-    pipeNorthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20width='60'%20height='300'%20fill='%234CAF50'%20stroke='%232E7D32'%20stroke-width='4'/%3E%3C/svg%3E";
+    pipeNorthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20x='0'%20y='0'%20width='60'%20height='300'%20rx='10'%20fill='%234CAF50'%20stroke='%232E7D32'%20stroke-width='4'/%3E%3C/svg%3E";
     const pipeSouthImg = new Image();
-    pipeSouthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20width='60'%20height='300'%20fill='%2366BB6A'%20stroke='%23388E3C'%20stroke-width='4'/%3E%3C/svg%3E";
+    pipeSouthImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='60'%20height='300'%3E%3Crect%20x='0'%20y='0'%20width='60'%20height='300'%20rx='10'%20fill='%2366BB6A'%20stroke='%23388E3C'%20stroke-width='4'/%3E%3C/svg%3E";
 
-    // Coin images: Gold coin and Diamond coin
+    // Coin images (gold coin and diamond).
     const goldCoinImg = new Image();
     goldCoinImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Ccircle%20cx='16'%20cy='16'%20r='14'%20fill='gold'%20stroke='%232E7D32'%20stroke-width='2'/%3E%3C/svg%3E";
     const diamondImg = new Image();
     diamondImg.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cpolygon%20points='16,2%2030,16%2016,30%202,16'%20fill='deepskyblue'%20stroke='blue'%20stroke-width='2'/%3E%3C/svg%3E";
 
-    // Bird object
+    // Bird object (position, dimensions, and velocity).
     let bird = {
       x: 50,
       y: canvas.height / 2,
@@ -179,7 +175,7 @@
     };
 
     /***** CLOUDS *****/
-    // Create some cloud objects for background ambience
+    // Clouds add depth to the background.
     function spawnCloud() {
       clouds.push({
         x: canvas.width,
@@ -188,10 +184,7 @@
         scale: 0.5 + Math.random() * 0.5
       });
     }
-    // Spawn a new cloud every 3 seconds
     setInterval(spawnCloud, 3000);
-
-    // Draw a cloud using simple arcs
     function drawCloud(cloud) {
       ctx.save();
       ctx.translate(cloud.x, cloud.y);
@@ -199,7 +192,7 @@
       ctx.fillStyle = "rgba(255,255,255,0.8)";
       ctx.beginPath();
       ctx.arc(0, 0, 20, Math.PI * 0.5, Math.PI * 1.5);
-      ctx.arc(25, -10, 20, Math.PI * 1, Math.PI * 2);
+      ctx.arc(25, -10, 20, Math.PI, Math.PI * 2);
       ctx.arc(50, 0, 20, Math.PI * 1.5, Math.PI * 0.5);
       ctx.closePath();
       ctx.fill();
@@ -207,7 +200,7 @@
     }
 
     /***** INPUT HANDLING *****/
-    // Make the bird "flap" (jump) on key, click, or touch
+    // The bird flaps (jumps) when the user taps, clicks, or presses space.
     function flap() {
       if (!gameOver) {
         bird.velocity = JUMP_STRENGTH;
@@ -224,39 +217,38 @@
     });
 
     /***** GAME LOGIC *****/
-    // Restart game on button click
     restartButton.addEventListener('click', restartGame);
 
-    // Spawn pipes (obstacles)
+    // Spawn pipes with a clearly defined gap using a gap center.
     function spawnPipe() {
-      const gapPosition = Math.random() * (canvas.height - PIPE_GAP - 100) + 50;
-      // Top pipe
+      const gapCenter = Math.random() * (canvas.height - PIPE_GAP - 100) + (PIPE_GAP / 2 + 50);
+      const topPipeBottom = gapCenter - PIPE_GAP / 2;
+      const bottomPipeTop = gapCenter + PIPE_GAP / 2;
+      // Top pipe (positioned so its bottom aligns with the gap).
       pipes.push({
         x: canvas.width,
-        y: gapPosition - PIPE_GAP - pipeNorthImg.height,
+        y: topPipeBottom - pipeNorthImg.height,
         isTop: true
       });
-      // Bottom pipe
+      // Bottom pipe (positioned so its top aligns with the gap).
       pipes.push({
         x: canvas.width,
-        y: gapPosition + PIPE_GAP,
+        y: bottomPipeTop,
         isTop: false
       });
+      // With 80% probability, spawn a coin or diamond in the gap.
+      if (Math.random() < 0.8) {
+        const type = Math.random() < 0.6 ? "gold" : "diamond";
+        coins.push({
+          x: canvas.width + PIPE_WIDTH / 2,
+          y: gapCenter - COIN_SIZE / 2,
+          type: type,
+          collected: false
+        });
+      }
     }
 
-    // Spawn coins with random type ("gold" or "diamond")
-    function spawnCoin() {
-      const coinY = Math.random() * (canvas.height - COIN_SIZE - 100) + 50;
-      const type = Math.random() < 0.6 ? "gold" : "diamond"; // 60% chance gold, 40% diamond
-      coins.push({
-        x: canvas.width,
-        y: coinY,
-        type: type,
-        collected: false
-      });
-    }
-
-    // Collision detection between two rectangles
+    // Standard rectangle collision detection.
     function detectCollision(r1, r2) {
       return (
         r1.x < r2.x + r2.width &&
@@ -266,13 +258,11 @@
       );
     }
 
-    // End the game and show Game Over screen
     function endGame() {
       gameOver = true;
       gameOverScreen.style.display = 'block';
     }
 
-    // Restart the game
     function restartGame() {
       bird.x = 50;
       bird.y = canvas.height / 2;
@@ -281,7 +271,6 @@
       coins = [];
       score = 0;
       lastPipeTime = 0;
-      lastCoinTime = 0;
       gameOver = false;
       gameOverScreen.style.display = 'none';
       scoreBoard.textContent = "Score: " + score;
@@ -290,17 +279,13 @@
     }
 
     /***** DRAWING FUNCTIONS *****/
-    // Draw the background with gradient and clouds
     function drawBackground() {
-      // Background gradient
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       grad.addColorStop(0, "#87ceeb");
       grad.addColorStop(1, "#ffffff");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw clouds
-      clouds.forEach(cloud => {
+      clouds.forEach((cloud, i) => {
         drawCloud(cloud);
       });
     }
@@ -311,87 +296,74 @@
       const deltaTime = timestamp - lastTime;
       lastTime = timestamp;
 
-      // Update cloud positions
+      // Update cloud positions.
       clouds.forEach((cloud, i) => {
         cloud.x -= cloud.speed;
-        // Remove off-screen clouds
         if (cloud.x + 60 * cloud.scale < 0) {
           clouds.splice(i, 1);
         }
       });
 
-      // Draw background (gradient + clouds)
       drawBackground();
 
-      // Update bird physics
+      // Update bird physics.
       bird.velocity += GRAVITY;
       bird.y += bird.velocity;
       ctx.drawImage(birdImg, bird.x, bird.y, bird.width, bird.height);
 
-      // Spawn pipes at intervals
+      // Increase pipe speed gradually based on score.
+      const pipeSpeed = 2 + score * 0.02;
+
+      // Spawn pipes at set intervals.
       if (timestamp - lastPipeTime > PIPE_INTERVAL) {
         spawnPipe();
         lastPipeTime = timestamp;
       }
-      // Update and draw pipes
+      // Update and draw pipes.
       for (let i = pipes.length - 1; i >= 0; i--) {
         const pipe = pipes[i];
-        pipe.x -= 2; // pipe speed
+        pipe.x -= pipeSpeed;
         if (pipe.isTop) {
           ctx.drawImage(pipeNorthImg, pipe.x, pipe.y);
-          // Collision with top pipe
           if (detectCollision(bird, { x: pipe.x, y: pipe.y, width: pipeNorthImg.width, height: pipeNorthImg.height })) {
             endGame();
           }
         } else {
           ctx.drawImage(pipeSouthImg, pipe.x, pipe.y);
-          // Collision with bottom pipe
           if (detectCollision(bird, { x: pipe.x, y: pipe.y, width: pipeSouthImg.width, height: pipeSouthImg.height })) {
             endGame();
           }
         }
-        // Remove off-screen pipes
         if (pipe.x + PIPE_WIDTH < 0) {
           pipes.splice(i, 1);
         }
       }
 
-      // Spawn coins at intervals
-      if (timestamp - lastCoinTime > COIN_INTERVAL) {
-        spawnCoin();
-        lastCoinTime = timestamp;
-      }
-      // Update and draw coins
+      // Update and draw coins/diamonds.
       for (let i = coins.length - 1; i >= 0; i--) {
         const coin = coins[i];
-        coin.x -= 2; // same speed as pipes
-        // Choose image based on coin type
+        coin.x -= pipeSpeed;
         let coinImgToDraw = coin.type === "gold" ? goldCoinImg : diamondImg;
         ctx.drawImage(coinImgToDraw, coin.x, coin.y, COIN_SIZE, COIN_SIZE);
-        
-        // Check for collision with bird (collect coin)
         if (!coin.collected && detectCollision(bird, { x: coin.x, y: coin.y, width: COIN_SIZE, height: COIN_SIZE })) {
           coin.collected = true;
           playBeep(600, 0.1);
-          // Award points: gold gives 10, diamond gives 20
-          score += (coin.type === "gold" ? 10 : 20);
+          score += coin.type === "gold" ? 10 : 20;
           scoreBoard.textContent = "Score: " + score;
         }
-        // Remove coins that are off-screen or collected
         if (coin.x + COIN_SIZE < 0 || coin.collected) {
           coins.splice(i, 1);
         }
       }
 
-      // Check if the bird hits the ground or goes off the top
+      // End game if the bird hits the ground or flies off the top.
       if (bird.y + bird.height > canvas.height || bird.y < 0) {
         endGame();
       }
-
       requestAnimationFrame(loop);
     }
 
-    // Start the game loop
+    // Start the game loop.
     requestAnimationFrame(loop);
   </script>
 </body>
